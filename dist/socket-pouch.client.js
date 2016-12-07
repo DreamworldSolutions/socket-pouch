@@ -162,7 +162,7 @@ function close(api, callback) {
 // Implements the PouchDB API for dealing with CouchDB instances over WS
 function SocketPouch(opts, callback) {
   var api = this;
-
+  window.pradip = this;
   if (typeof opts === 'string') {
     var slashIdx = utils.lastIndexOf(opts, '/');
     opts = {
@@ -242,6 +242,11 @@ function SocketPouch(opts, callback) {
     });
 
     socket.on('reconnecting', function(attempts) {
+	  for(var messageId in api._callbacks)	{
+		api._callbacks[messageId]({status: 0, name: "unknown", message: undefined});
+	  }
+	  api._callbacks = {};
+
       log('Trying to reconnect after %d attempts', attempts);
     });
 
@@ -5723,8 +5728,18 @@ Reconnect.prototype.reconnect = function (){
     this.reconnecting = false;
   } else {
     var delay = this.attempt * this.delay();
+    if(delay > this._delayMax){
+    	delay = this._delayMax;
+    }
+    
     debug('will wait %dms before reconnect attempt', delay);
+    
+    if(this.reconnectTimer){
+    	clearTimeout(this.reconnectTimer)
+    }
+    
     this.reconnectTimer = setTimeout(bind(this, function() {
+      this.reconnectTimer = null;
       debug('attemptign reconnect');
       this.open(bind(this, function(err){
         if (err) {
@@ -5739,7 +5754,6 @@ Reconnect.prototype.reconnect = function (){
     }), delay);
   }
 };
-
 /**
  * Called upon successful reconnect.
  *
