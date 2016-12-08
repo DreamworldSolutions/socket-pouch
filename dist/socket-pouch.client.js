@@ -220,7 +220,7 @@ function SocketPouch(opts, callback) {
     // to force XHR during debugging
     // opts.socketOptions = {transports: ['polling']};
     var socket = api._socket = new Socket(opts.url, opts.socketOptions || {});
-    socket = api._socket = reconnect(socket);
+    socket = api._socket = reconnect(socket, opts.reconnectOptions || {});
 
     socket.on('reconnect', function(attempts) {
       log('Reconnected after %d attempts', attempts);
@@ -406,6 +406,10 @@ function SocketPouch(opts, callback) {
     } else if (api._closed) {
       return callback(new Error('this db was closed'));
     }
+    if(api._socket.readyState !== 'open'){
+    	callback({status: 0, name: "unknown", message: undefined});
+    	return;
+    }
     var messageId = uuid();
     log('send message', api._socketId, messageId, type, args);
     api._callbacks[messageId] = callback;
@@ -452,7 +456,16 @@ function SocketPouch(opts, callback) {
   };
 
   api._id = adapterFun('id', function (callback) {
-    sendMessage('id', [], callback);
+	 var dbName = this.name;
+	 var originalCallback = callback;
+      callback = function(){
+		 var args = arguments;
+		 if(args[0] && args[0].status === 0){
+			 args = [null, dbName]
+		 }
+		 originalCallback.apply(this, args)
+	 }
+     sendMessage('id', [], callback);
   });
 
   api.compact = adapterFun('compact', function (opts, callback) {
