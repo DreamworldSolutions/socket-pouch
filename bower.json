@@ -25,5 +25,8 @@
     "test",
     "tests",
     "vendor"
-  ]
+  ],
+  "devDependencies": {
+    "pouchdb": "^6.0.6"
+  }
 }
