@@ -5,7 +5,7 @@ socketPouchServer.listen(8008, {
   pouchCreator : function(dbName) {
     return Promise.resolve().then(function() {
       return {
-        pouch : new PouchDB('http://192.168.0.44:5984/' + dbName)
+        pouch : new PouchDB('http://192.168.0.51:5984/' + dbName)
       };
     });
   }
