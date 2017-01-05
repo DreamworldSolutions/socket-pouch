@@ -196,10 +196,12 @@ function SocketPouch(opts, callback) {
     var instance = instances[cacheKey];
     api._socket = instance._socket;
     api._callbacks = instance._callbacks;
+    api._callbacksTimeout = instance._callbacksTimeout;
     api._changesListeners = instance._changesListeners;
     api._blobs = instance._blobs;
     api._binaryMessages = instance._binaryMessages;
     api._name = instance._name;
+    api._timeout = instance._timeout;;
 
     if (instance._socketId) {
       api._socketId = instance._socketId;
@@ -221,6 +223,7 @@ function SocketPouch(opts, callback) {
     // opts.socketOptions = {transports: ['polling']};
     var socket = api._socket = new Socket(opts.url, opts.socketOptions || {});
     socket = api._socket = reconnect(socket, opts.reconnectOptions || {});
+    api._timeout = opts.timeout || 1500;
 
     socket.on('reconnect', function(attempts) {
       log('Reconnected after %d attempts', attempts);
@@ -258,9 +261,11 @@ function SocketPouch(opts, callback) {
     socket.on('reconnect_timeout', function(timeout) {
       log('Timeout after %dms', timeout);
     });
+    
     socket.binaryType = 'blob';
     api._callbacks = {};
     api._changesListeners = {};
+    api._callbacksTimeout = {};
     api._blobs = {};
     api._binaryMessages = {};
     api._name = api._socketName;
@@ -308,6 +313,8 @@ function SocketPouch(opts, callback) {
       var messageType = split[1];
       var content = JSON.parse(split[2]);
 
+      clearMessageTimeout(messageId);
+      
       if (messageType === '4') { // unhandled error
         handleUncaughtError(content);
         return;
@@ -413,6 +420,7 @@ function SocketPouch(opts, callback) {
     var messageId = uuid();
     log('send message', api._socketId, messageId, type, args);
     api._callbacks[messageId] = callback;
+    setMessageTimeout(messageId);
     var stringArgs = stringifyArgs(args);
     api._socket.send(type + ':' + messageId + ':' + stringArgs, function () {
       log('message sent', api._socketId, messageId);
@@ -422,6 +430,8 @@ function SocketPouch(opts, callback) {
   function sendBinaryMessage(type, args, blobIndex, blob, callback) {
     var messageId = uuid();
     api._callbacks[messageId] = callback;
+    setMessageTimeout(messageId);
+    
     var header = {
       args: args,
       blobIndex: blobIndex,
@@ -450,6 +460,38 @@ function SocketPouch(opts, callback) {
       log('binary message sent', api._socketId, messageId);
     });
   }
+  
+  function setMessageTimeout(messageId){
+	  var callback = api._callbacks[messageId];
+	  var timeout = api._callbacksTimeout[messageId];
+	  
+	  if(!callback && !timeout){
+		  return;
+	  }
+	  
+	  if(!callback && timeout){
+		  clearMessageTimeout(messageId);
+		  return;
+	  }
+	  
+	  api._callbacksTimeout[messageId] = window.setTimeout(function(){
+		  delete api._callbacksTimeout[messageId];
+		  callback = api._callbacks[messageId];
+		  if(callback){
+			  callback({status: 0, name: "unknown", message: undefined});
+			  delete api._callbacks[messageId];
+		  }
+	  }, api._timeout);
+	  
+  }
+  function clearMessageTimeout(messageId){
+	  var timeout = api._callbacksTimeout[messageId];
+	  if(timeout){
+		  window.clearTimeout(timeout);
+		  delete api._callbacksTimeout[messageId];
+	  }
+  }
+  
 
   api.type = function () {
     return 'socket';
@@ -457,11 +499,12 @@ function SocketPouch(opts, callback) {
 
   api._id = adapterFun('id', function (callback) {
 	 var dbName = this.name;
+	 var url = this.__opts.url;
 	 var originalCallback = callback;
-      callback = function(){
+      callback = function(error, uuid){
 		 var args = arguments;
-		 if(args[0] && args[0].status === 0){
-			 args = [null, dbName]
+		 if(!uuid && error && error.status === 0){
+			 args = [null, url + '/' + dbName]
 		 }
 		 originalCallback.apply(this, args)
 	 }
@@ -804,7 +847,7 @@ if (typeof window !== 'undefined' && window.PouchDB) {
 }
 
 }).call(this,_dereq_('_process'))
-},{"../shared/buffer":11,"../shared/errors":13,"../shared/isBinaryObject":14,"../shared/utils":17,"./../shared/uuid":18,"./base64":3,"./readAsBinaryString":9,"./utils":10,"_process":71,"blob-util":23,"debug":28,"engine.io-client":30,"engine.io-reconnect":42,"pouchdb-promise":69}],9:[function(_dereq_,module,exports){
+},{"../shared/buffer":11,"../shared/errors":13,"../shared/isBinaryObject":14,"../shared/utils":17,"./../shared/uuid":18,"./base64":3,"./readAsBinaryString":9,"./utils":10,"_process":73,"blob-util":23,"debug":28,"engine.io-client":30,"engine.io-reconnect":44,"pouchdb-promise":71}],9:[function(_dereq_,module,exports){
 'use strict';
 
 var arrayBufferToBinaryString = _dereq_('./arrayBufferToBinaryString');
@@ -946,7 +989,7 @@ exports.adapterFun = function adapterFun(name, callback) {
   }));
 };
 }).call(this,_dereq_('_process'))
-},{"../shared/utils":17,"./base64StringToBlobOrBuffer":4,"_process":71,"debug":28}],11:[function(_dereq_,module,exports){
+},{"../shared/utils":17,"./base64StringToBlobOrBuffer":4,"_process":73,"debug":28}],11:[function(_dereq_,module,exports){
 // hey guess what, we don't need this in the browser
 module.exports = {};
 },{}],12:[function(_dereq_,module,exports){
@@ -1240,7 +1283,7 @@ exports.generateErrorFromResponse = function (res) {
   return error;
 };
 
-},{"inherits":48}],14:[function(_dereq_,module,exports){
+},{"inherits":50}],14:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = function isBinaryObject(object) {
@@ -1436,7 +1479,7 @@ exports.readAsBinaryString = binUtil.readAsBinaryString;
 exports.binaryStringToArrayBuffer = binUtil.binaryStringToArrayBuffer;
 exports.arrayBufferToBinaryString = binUtil.arrayBufferToBinaryString;
 }).call(this,_dereq_('_process'))
-},{"./buffer":11,"./parse-message":15,"./pouchdb-clone":16,"_process":71,"inherits":48,"pouchdb-binary-util":68,"pouchdb-promise":69}],18:[function(_dereq_,module,exports){
+},{"./buffer":11,"./parse-message":15,"./pouchdb-clone":16,"_process":73,"inherits":50,"pouchdb-binary-util":70,"pouchdb-promise":71}],18:[function(_dereq_,module,exports){
 "use strict";
 
 // BEGIN Math.uuid.js
@@ -1988,7 +2031,7 @@ module.exports = {
   blobToArrayBuffer  : blobToArrayBuffer
 };
 
-},{"blob":24,"native-or-lie":64}],24:[function(_dereq_,module,exports){
+},{"blob":24,"native-or-lie":66}],24:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Create a blob builder even when vendor prefixes exist
@@ -2265,7 +2308,6 @@ module.exports = function(a, b){
 };
 },{}],28:[function(_dereq_,module,exports){
 (function (process){
-
 /**
  * This is the web browser implementation of `debug()`.
  *
@@ -2305,14 +2347,23 @@ exports.colors = [
  */
 
 function useColors() {
+  // NB: In an Electron preload script, document will be defined but not fully
+  // initialized. Since we know we're in Chrome, we'll just detect this case
+  // explicitly
+  if (typeof window !== 'undefined' && window && typeof window.process !== 'undefined' && window.process.type === 'renderer') {
+    return true;
+  }
+
   // is webkit? http://stackoverflow.com/a/16459606/376773
   // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
-  return (typeof document !== 'undefined' && 'WebkitAppearance' in document.documentElement.style) ||
+  return (typeof document !== 'undefined' && document && 'WebkitAppearance' in document.documentElement.style) ||
     // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
+    (typeof window !== 'undefined' && window && window.console && (console.firebug || (console.exception && console.table))) ||
     // is firefox >= v31?
     // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    // double check webkit in userAgent just in case we are in a worker
+    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
 }
 
 /**
@@ -2334,8 +2385,7 @@ exports.formatters.j = function(v) {
  * @api public
  */
 
-function formatArgs() {
-  var args = arguments;
+function formatArgs(args) {
   var useColors = this.useColors;
 
   args[0] = (useColors ? '%c' : '')
@@ -2345,17 +2395,17 @@ function formatArgs() {
     + (useColors ? '%c ' : ' ')
     + '+' + exports.humanize(this.diff);
 
-  if (!useColors) return args;
+  if (!useColors) return;
 
   var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+  args.splice(1, 0, c, 'color: inherit')
 
   // the final "%c" is somewhat tricky, because there could be other
   // arguments passed either before or after the %c, so we need to
   // figure out the correct index to insert the CSS into
   var index = 0;
   var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
+  args[0].replace(/%[a-zA-Z%]/g, function(match) {
     if ('%%' === match) return;
     index++;
     if ('%c' === match) {
@@ -2366,7 +2416,6 @@ function formatArgs() {
   });
 
   args.splice(lastC, 0, c);
-  return args;
 }
 
 /**
@@ -2409,7 +2458,6 @@ function save(namespaces) {
  */
 
 function load() {
-  var r;
   try {
     return exports.storage.debug;
   } catch(e) {}
@@ -2437,14 +2485,14 @@ exports.enable(load());
  * @api private
  */
 
-function localstorage(){
+function localstorage() {
   try {
     return window.localStorage;
   } catch (e) {}
 }
 
 }).call(this,_dereq_('_process'))
-},{"./debug":29,"_process":71}],29:[function(_dereq_,module,exports){
+},{"./debug":29,"_process":73}],29:[function(_dereq_,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -2453,7 +2501,7 @@ function localstorage(){
  * Expose `debug()` as the module.
  */
 
-exports = module.exports = debug.debug = debug;
+exports = module.exports = createDebug.debug = createDebug["default"] = createDebug;
 exports.coerce = coerce;
 exports.disable = disable;
 exports.enable = enable;
@@ -2470,16 +2518,10 @@ exports.skips = [];
 /**
  * Map of special "%n" handling functions, for the debug "format" argument.
  *
- * Valid key names are a single, lowercased letter, i.e. "n".
+ * Valid key names are a single, lower or upper-case letter, i.e. "n" and "N".
  */
 
 exports.formatters = {};
-
-/**
- * Previously assigned color.
- */
-
-var prevColor = 0;
 
 /**
  * Previous log timestamp.
@@ -2489,13 +2531,20 @@ var prevTime;
 
 /**
  * Select a color.
- *
+ * @param {String} namespace
  * @return {Number}
  * @api private
  */
 
-function selectColor() {
-  return exports.colors[prevColor++ % exports.colors.length];
+function selectColor(namespace) {
+  var hash = 0, i;
+
+  for (i in namespace) {
+    hash  = ((hash << 5) - hash) + namespace.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+
+  return exports.colors[Math.abs(hash) % exports.colors.length];
 }
 
 /**
@@ -2506,17 +2555,13 @@ function selectColor() {
  * @api public
  */
 
-function debug(namespace) {
+function createDebug(namespace) {
 
-  // define the `disabled` version
-  function disabled() {
-  }
-  disabled.enabled = false;
+  function debug() {
+    // disabled?
+    if (!debug.enabled) return;
 
-  // define the `enabled` version
-  function enabled() {
-
-    var self = enabled;
+    var self = debug;
 
     // set `diff` timestamp
     var curr = +new Date();
@@ -2526,10 +2571,7 @@ function debug(namespace) {
     self.curr = curr;
     prevTime = curr;
 
-    // add the `color` if not set
-    if (null == self.useColors) self.useColors = exports.useColors();
-    if (null == self.color && self.useColors) self.color = selectColor();
-
+    // turn the `arguments` into a proper Array
     var args = new Array(arguments.length);
     for (var i = 0; i < args.length; i++) {
       args[i] = arguments[i];
@@ -2538,13 +2580,13 @@ function debug(namespace) {
     args[0] = exports.coerce(args[0]);
 
     if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %o
-      args = ['%o'].concat(args);
+      // anything else let's inspect with %O
+      args.unshift('%O');
     }
 
     // apply any `formatters` transformations
     var index = 0;
-    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+    args[0] = args[0].replace(/%([a-zA-Z%])/g, function(match, format) {
       // if we encounter an escaped % then don't increase the array index
       if (match === '%%') return match;
       index++;
@@ -2560,19 +2602,24 @@ function debug(namespace) {
       return match;
     });
 
-    // apply env-specific formatting
-    args = exports.formatArgs.apply(self, args);
+    // apply env-specific formatting (colors, etc.)
+    exports.formatArgs.call(self, args);
 
-    var logFn = enabled.log || exports.log || console.log.bind(console);
+    var logFn = debug.log || exports.log || console.log.bind(console);
     logFn.apply(self, args);
   }
-  enabled.enabled = true;
 
-  var fn = exports.enabled(namespace) ? enabled : disabled;
+  debug.namespace = namespace;
+  debug.enabled = exports.enabled(namespace);
+  debug.useColors = exports.useColors();
+  debug.color = selectColor(namespace);
 
-  fn.namespace = namespace;
+  // env-specific initialization logic for debug instances
+  if ('function' === typeof exports.init) {
+    exports.init(debug);
+  }
 
-  return fn;
+  return debug;
 }
 
 /**
@@ -2591,7 +2638,7 @@ function enable(namespaces) {
 
   for (var i = 0; i < len; i++) {
     if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/[\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*?');
+    namespaces = split[i].replace(/\*/g, '.*?');
     if (namespaces[0] === '-') {
       exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
     } else {
@@ -2646,7 +2693,7 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":63}],30:[function(_dereq_,module,exports){
+},{"ms":65}],30:[function(_dereq_,module,exports){
 
 module.exports = _dereq_('./lib/index');
 
@@ -2662,7 +2709,7 @@ module.exports = _dereq_('./socket');
  */
 module.exports.parser = _dereq_('engine.io-parser');
 
-},{"./socket":32,"engine.io-parser":40}],32:[function(_dereq_,module,exports){
+},{"./socket":32,"engine.io-parser":42}],32:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -3404,7 +3451,7 @@ Socket.prototype.filterUpgrades = function (upgrades) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./transport":33,"./transports/index":34,"component-emitter":26,"debug":28,"engine.io-parser":40,"indexof":47,"parsejson":65,"parseqs":66,"parseuri":67}],33:[function(_dereq_,module,exports){
+},{"./transport":33,"./transports/index":34,"component-emitter":26,"debug":40,"engine.io-parser":42,"indexof":49,"parsejson":67,"parseqs":68,"parseuri":69}],33:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -3563,7 +3610,7 @@ Transport.prototype.onClose = function () {
   this.emit('close');
 };
 
-},{"component-emitter":26,"engine.io-parser":40}],34:[function(_dereq_,module,exports){
+},{"component-emitter":26,"engine.io-parser":42}],34:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies
@@ -4283,7 +4330,7 @@ function unloadHandler () {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling":37,"component-emitter":26,"component-inherit":27,"debug":28,"xmlhttprequest-ssl":39}],37:[function(_dereq_,module,exports){
+},{"./polling":37,"component-emitter":26,"component-inherit":27,"debug":40,"xmlhttprequest-ssl":39}],37:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -4530,7 +4577,7 @@ Polling.prototype.uri = function () {
   return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
 };
 
-},{"../transport":33,"component-inherit":27,"debug":28,"engine.io-parser":40,"parseqs":66,"xmlhttprequest-ssl":39,"yeast":73}],38:[function(_dereq_,module,exports){
+},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":42,"parseqs":68,"xmlhttprequest-ssl":39,"yeast":75}],38:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -4819,7 +4866,7 @@ WS.prototype.check = function () {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../transport":33,"component-inherit":27,"debug":28,"engine.io-parser":40,"parseqs":66,"ws":25,"yeast":73}],39:[function(_dereq_,module,exports){
+},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":42,"parseqs":68,"ws":25,"yeast":75}],39:[function(_dereq_,module,exports){
 (function (global){
 // browser shim for xmlhttprequest module
 
@@ -4860,7 +4907,390 @@ module.exports = function (opts) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"has-cors":45}],40:[function(_dereq_,module,exports){
+},{"has-cors":47}],40:[function(_dereq_,module,exports){
+(function (process){
+
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = _dereq_('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+exports.storage = 'undefined' != typeof chrome
+               && 'undefined' != typeof chrome.storage
+                  ? chrome.storage.local
+                  : localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
+  return (typeof document !== 'undefined' && 'WebkitAppearance' in document.documentElement.style) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (window.console && (console.firebug || (console.exception && console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  try {
+    return JSON.stringify(v);
+  } catch (err) {
+    return '[UnexpectedJSONParseError]: ' + err.message;
+  }
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      exports.storage.removeItem('debug');
+    } else {
+      exports.storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    return exports.storage.debug;
+  } catch(e) {}
+
+  // If debug isn't set in LS, and we're in Electron, try to load $DEBUG
+  if (typeof process !== 'undefined' && 'env' in process) {
+    return process.env.DEBUG;
+  }
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage(){
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+}).call(this,_dereq_('_process'))
+},{"./debug":41,"_process":73}],41:[function(_dereq_,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = debug.debug = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = _dereq_('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lowercased letter, i.e. "n".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function debug(namespace) {
+
+  // define the `disabled` version
+  function disabled() {
+  }
+  disabled.enabled = false;
+
+  // define the `enabled` version
+  function enabled() {
+
+    var self = enabled;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // add the `color` if not set
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = new Array(arguments.length);
+    for (var i = 0; i < args.length; i++) {
+      args[i] = arguments[i];
+    }
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %o
+      args = ['%o'].concat(args);
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    // apply env-specific formatting
+    args = exports.formatArgs.apply(self, args);
+
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/[\\^$+?.()|[\]{}]/g, '\\$&').replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":65}],42:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -5473,7 +5903,7 @@ exports.decodePayloadAsBinary = function (data, binaryType, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./keys":41,"after":19,"arraybuffer.slice":20,"base64-arraybuffer":21,"blob":24,"has-binary":44,"wtf-8":72}],41:[function(_dereq_,module,exports){
+},{"./keys":43,"after":19,"arraybuffer.slice":20,"base64-arraybuffer":21,"blob":24,"has-binary":46,"wtf-8":74}],43:[function(_dereq_,module,exports){
 
 /**
  * Gets the keys for an object.
@@ -5494,9 +5924,9 @@ module.exports = Object.keys || function keys (obj){
   return arr;
 };
 
-},{}],42:[function(_dereq_,module,exports){
+},{}],44:[function(_dereq_,module,exports){
 module.exports = _dereq_('./lib');
-},{"./lib":43}],43:[function(_dereq_,module,exports){
+},{"./lib":45}],45:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -5795,7 +6225,7 @@ Reconnect.prototype.on = function (ev, fn) {
   return this;
 };
 
-},{"bind":22,"debug":28}],44:[function(_dereq_,module,exports){
+},{"bind":22,"debug":28}],46:[function(_dereq_,module,exports){
 (function (global){
 
 /*
@@ -5824,7 +6254,7 @@ function hasBinary(data) {
   function _hasBinary(obj) {
     if (!obj) return false;
 
-    if ( (global.Buffer && global.Buffer.isBuffer(obj)) ||
+    if ( (global.Buffer && global.Buffer.isBuffer && global.Buffer.isBuffer(obj)) ||
          (global.ArrayBuffer && obj instanceof ArrayBuffer) ||
          (global.Blob && obj instanceof Blob) ||
          (global.File && obj instanceof File)
@@ -5839,7 +6269,8 @@ function hasBinary(data) {
           }
       }
     } else if (obj && 'object' == typeof obj) {
-      if (obj.toJSON) {
+      // see: https://github.com/Automattic/has-binary/pull/4
+      if (obj.toJSON && 'function' == typeof obj.toJSON) {
         obj = obj.toJSON();
       }
 
@@ -5857,7 +6288,7 @@ function hasBinary(data) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"isarray":49}],45:[function(_dereq_,module,exports){
+},{"isarray":51}],47:[function(_dereq_,module,exports){
 
 /**
  * Module exports.
@@ -5876,7 +6307,7 @@ try {
   module.exports = false;
 }
 
-},{}],46:[function(_dereq_,module,exports){
+},{}],48:[function(_dereq_,module,exports){
 (function (global){
 'use strict';
 var Mutation = global.MutationObserver || global.WebKitMutationObserver;
@@ -5949,7 +6380,7 @@ function immediate(task) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],47:[function(_dereq_,module,exports){
+},{}],49:[function(_dereq_,module,exports){
 
 var indexOf = [].indexOf;
 
@@ -5960,7 +6391,7 @@ module.exports = function(arr, obj){
   }
   return -1;
 };
-},{}],48:[function(_dereq_,module,exports){
+},{}],50:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -5985,18 +6416,18 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],49:[function(_dereq_,module,exports){
+},{}],51:[function(_dereq_,module,exports){
 module.exports = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-},{}],50:[function(_dereq_,module,exports){
+},{}],52:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = INTERNAL;
 
 function INTERNAL() {}
-},{}],51:[function(_dereq_,module,exports){
+},{}],53:[function(_dereq_,module,exports){
 'use strict';
 var Promise = _dereq_('./promise');
 var reject = _dereq_('./reject');
@@ -6040,7 +6471,7 @@ function all(iterable) {
     }
   }
 }
-},{"./INTERNAL":50,"./handlers":52,"./promise":54,"./reject":57,"./resolve":58}],52:[function(_dereq_,module,exports){
+},{"./INTERNAL":52,"./handlers":54,"./promise":56,"./reject":59,"./resolve":60}],54:[function(_dereq_,module,exports){
 'use strict';
 var tryCatch = _dereq_('./tryCatch');
 var resolveThenable = _dereq_('./resolveThenable');
@@ -6087,7 +6518,7 @@ function getThen(obj) {
   }
 }
 
-},{"./resolveThenable":59,"./states":60,"./tryCatch":61}],53:[function(_dereq_,module,exports){
+},{"./resolveThenable":61,"./states":62,"./tryCatch":63}],55:[function(_dereq_,module,exports){
 module.exports = exports = _dereq_('./promise');
 
 exports.resolve = _dereq_('./resolve');
@@ -6095,7 +6526,7 @@ exports.reject = _dereq_('./reject');
 exports.all = _dereq_('./all');
 exports.race = _dereq_('./race');
 
-},{"./all":51,"./promise":54,"./race":56,"./reject":57,"./resolve":58}],54:[function(_dereq_,module,exports){
+},{"./all":53,"./promise":56,"./race":58,"./reject":59,"./resolve":60}],56:[function(_dereq_,module,exports){
 'use strict';
 
 var unwrap = _dereq_('./unwrap');
@@ -6139,7 +6570,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
   return promise;
 };
 
-},{"./INTERNAL":50,"./queueItem":55,"./resolveThenable":59,"./states":60,"./unwrap":62}],55:[function(_dereq_,module,exports){
+},{"./INTERNAL":52,"./queueItem":57,"./resolveThenable":61,"./states":62,"./unwrap":64}],57:[function(_dereq_,module,exports){
 'use strict';
 var handlers = _dereq_('./handlers');
 var unwrap = _dereq_('./unwrap');
@@ -6169,7 +6600,7 @@ QueueItem.prototype.otherCallRejected = function (value) {
   unwrap(this.promise, this.onRejected, value);
 };
 
-},{"./handlers":52,"./unwrap":62}],56:[function(_dereq_,module,exports){
+},{"./handlers":54,"./unwrap":64}],58:[function(_dereq_,module,exports){
 'use strict';
 var Promise = _dereq_('./promise');
 var reject = _dereq_('./reject');
@@ -6210,7 +6641,7 @@ function race(iterable) {
   }
 }
 
-},{"./INTERNAL":50,"./handlers":52,"./promise":54,"./reject":57,"./resolve":58}],57:[function(_dereq_,module,exports){
+},{"./INTERNAL":52,"./handlers":54,"./promise":56,"./reject":59,"./resolve":60}],59:[function(_dereq_,module,exports){
 'use strict';
 
 var Promise = _dereq_('./promise');
@@ -6222,7 +6653,7 @@ function reject(reason) {
 	var promise = new Promise(INTERNAL);
 	return handlers.reject(promise, reason);
 }
-},{"./INTERNAL":50,"./handlers":52,"./promise":54}],58:[function(_dereq_,module,exports){
+},{"./INTERNAL":52,"./handlers":54,"./promise":56}],60:[function(_dereq_,module,exports){
 'use strict';
 
 var Promise = _dereq_('./promise');
@@ -6257,7 +6688,7 @@ function resolve(value) {
       return EMPTYSTRING;
   }
 }
-},{"./INTERNAL":50,"./handlers":52,"./promise":54}],59:[function(_dereq_,module,exports){
+},{"./INTERNAL":52,"./handlers":54,"./promise":56}],61:[function(_dereq_,module,exports){
 'use strict';
 var handlers = _dereq_('./handlers');
 var tryCatch = _dereq_('./tryCatch');
@@ -6290,14 +6721,14 @@ function safelyResolveThenable(self, thenable) {
   }
 }
 exports.safely = safelyResolveThenable;
-},{"./handlers":52,"./tryCatch":61}],60:[function(_dereq_,module,exports){
+},{"./handlers":54,"./tryCatch":63}],62:[function(_dereq_,module,exports){
 // Lazy man's symbols for states
 
 exports.REJECTED = ['REJECTED'];
 exports.FULFILLED = ['FULFILLED'];
 exports.PENDING = ['PENDING'];
 
-},{}],61:[function(_dereq_,module,exports){
+},{}],63:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = tryCatch;
@@ -6313,7 +6744,7 @@ function tryCatch(func, value) {
   }
   return out;
 }
-},{}],62:[function(_dereq_,module,exports){
+},{}],64:[function(_dereq_,module,exports){
 'use strict';
 
 var immediate = _dereq_('immediate');
@@ -6335,7 +6766,7 @@ function unwrap(promise, func, value) {
     }
   });
 }
-},{"./handlers":52,"immediate":46}],63:[function(_dereq_,module,exports){
+},{"./handlers":54,"immediate":48}],65:[function(_dereq_,module,exports){
 /**
  * Helpers.
  */
@@ -6486,10 +6917,10 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's'
 }
 
-},{}],64:[function(_dereq_,module,exports){
+},{}],66:[function(_dereq_,module,exports){
 module.exports = typeof Promise === 'function' ? Promise : _dereq_('lie');
 
-},{"lie":53}],65:[function(_dereq_,module,exports){
+},{"lie":55}],67:[function(_dereq_,module,exports){
 (function (global){
 /**
  * JSON parse.
@@ -6524,7 +6955,7 @@ module.exports = function parsejson(data) {
   }
 };
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],66:[function(_dereq_,module,exports){
+},{}],68:[function(_dereq_,module,exports){
 /**
  * Compiles a querystring
  * Returns string representation of the object
@@ -6563,7 +6994,7 @@ exports.decode = function(qs){
   return qry;
 };
 
-},{}],67:[function(_dereq_,module,exports){
+},{}],69:[function(_dereq_,module,exports){
 /**
  * Parses an URI
  *
@@ -6604,7 +7035,7 @@ module.exports = function parseuri(str) {
     return uri;
 };
 
-},{}],68:[function(_dereq_,module,exports){
+},{}],70:[function(_dereq_,module,exports){
 (function (global){
 "use strict";
 
@@ -6696,7 +7127,7 @@ module.exports = {
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],69:[function(_dereq_,module,exports){
+},{}],71:[function(_dereq_,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -6707,7 +7138,7 @@ var lie = _interopDefault(_dereq_('lie'));
 var PouchPromise = typeof Promise === 'function' ? Promise : lie;
 
 module.exports = PouchPromise;
-},{"lie":70}],70:[function(_dereq_,module,exports){
+},{"lie":72}],72:[function(_dereq_,module,exports){
 'use strict';
 var immediate = _dereq_('immediate');
 
@@ -6962,7 +7393,7 @@ function race(iterable) {
   }
 }
 
-},{"immediate":46}],71:[function(_dereq_,module,exports){
+},{"immediate":48}],73:[function(_dereq_,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -7022,7 +7453,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],72:[function(_dereq_,module,exports){
+},{}],74:[function(_dereq_,module,exports){
 (function (global){
 /*! https://mths.be/wtf8 v1.0.0 by @mathias */
 ;(function(root) {
@@ -7260,7 +7691,7 @@ process.umask = function() { return 0; };
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],73:[function(_dereq_,module,exports){
+},{}],75:[function(_dereq_,module,exports){
 'use strict';
 
 var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
