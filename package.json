@@ -1,6 +1,6 @@
 {
   "name": "socket-pouch",
-  "version": "2.0.7",
+  "version": "2.0.8-SNAPSHOT",
   "description": "PouchDB over websockets",
   "main": "server/index.js",
   "repository": {
