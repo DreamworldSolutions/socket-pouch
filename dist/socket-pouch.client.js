@@ -162,7 +162,6 @@ function close(api, callback) {
 // Implements the PouchDB API for dealing with CouchDB instances over WS
 function SocketPouch(opts, callback) {
   var api = this;
-  window.pradip = this;
   if (typeof opts === 'string') {
     var slashIdx = utils.lastIndexOf(opts, '/');
     opts = {
@@ -223,7 +222,8 @@ function SocketPouch(opts, callback) {
     // opts.socketOptions = {transports: ['polling']};
     var socket = api._socket = new Socket(opts.url, opts.socketOptions || {});
     socket = api._socket = reconnect(socket, opts.reconnectOptions || {});
-    api._timeout = opts.timeout || 1500;
+    // DSPL: We want it to be very long! so 14 mins hardcoded
+    api._timeout = opts.timeout || 840000;
 
     socket.on('reconnect', function(attempts) {
       log('Reconnected after %d attempts', attempts);
@@ -847,7 +847,7 @@ if (typeof window !== 'undefined' && window.PouchDB) {
 }
 
 }).call(this,_dereq_('_process'))
-},{"../shared/buffer":11,"../shared/errors":13,"../shared/isBinaryObject":14,"../shared/utils":17,"./../shared/uuid":18,"./base64":3,"./readAsBinaryString":9,"./utils":10,"_process":73,"blob-util":23,"debug":28,"engine.io-client":30,"engine.io-reconnect":44,"pouchdb-promise":71}],9:[function(_dereq_,module,exports){
+},{"../shared/buffer":11,"../shared/errors":13,"../shared/isBinaryObject":14,"../shared/utils":17,"./../shared/uuid":18,"./base64":3,"./readAsBinaryString":9,"./utils":10,"_process":74,"blob-util":23,"debug":28,"engine.io-client":30,"engine.io-reconnect":45,"pouchdb-promise":72}],9:[function(_dereq_,module,exports){
 'use strict';
 
 var arrayBufferToBinaryString = _dereq_('./arrayBufferToBinaryString');
@@ -989,7 +989,7 @@ exports.adapterFun = function adapterFun(name, callback) {
   }));
 };
 }).call(this,_dereq_('_process'))
-},{"../shared/utils":17,"./base64StringToBlobOrBuffer":4,"_process":73,"debug":28}],11:[function(_dereq_,module,exports){
+},{"../shared/utils":17,"./base64StringToBlobOrBuffer":4,"_process":74,"debug":28}],11:[function(_dereq_,module,exports){
 // hey guess what, we don't need this in the browser
 module.exports = {};
 },{}],12:[function(_dereq_,module,exports){
@@ -1283,7 +1283,7 @@ exports.generateErrorFromResponse = function (res) {
   return error;
 };
 
-},{"inherits":50}],14:[function(_dereq_,module,exports){
+},{"inherits":51}],14:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = function isBinaryObject(object) {
@@ -1479,7 +1479,7 @@ exports.readAsBinaryString = binUtil.readAsBinaryString;
 exports.binaryStringToArrayBuffer = binUtil.binaryStringToArrayBuffer;
 exports.arrayBufferToBinaryString = binUtil.arrayBufferToBinaryString;
 }).call(this,_dereq_('_process'))
-},{"./buffer":11,"./parse-message":15,"./pouchdb-clone":16,"_process":73,"inherits":50,"pouchdb-binary-util":70,"pouchdb-promise":71}],18:[function(_dereq_,module,exports){
+},{"./buffer":11,"./parse-message":15,"./pouchdb-clone":16,"_process":74,"inherits":51,"pouchdb-binary-util":71,"pouchdb-promise":72}],18:[function(_dereq_,module,exports){
 "use strict";
 
 // BEGIN Math.uuid.js
@@ -1917,6 +1917,19 @@ function dataURLToBlob(dataURL) {
 }
 
 /**
+ * Convert a <code>Blob</code> to a data URL string
+ * (e.g. <code>'data:image/png;base64,iVBORw0KG...'</code>).
+ * Returns a Promise.
+ * @param {Blob} blob
+ * @returns {Promise} Promise that resolves with the data URL string
+ */
+function blobToDataURL(blob) {
+  return blobToBase64String(blob).then(function (base64String) {
+    return 'data:' + blob.type + ';base64,' + base64String;
+  });
+}
+
+/**
  * Convert an image's <code>src</code> URL to a data URL by loading the image and painting
  * it to a <code>canvas</code>. Returns a Promise.
  *
@@ -2023,6 +2036,7 @@ module.exports = {
   imgSrcToDataURL    : imgSrcToDataURL,
   canvasToBlob       : canvasToBlob,
   dataURLToBlob      : dataURLToBlob,
+  blobToDataURL      : blobToDataURL,
   blobToBase64String : blobToBase64String,
   base64StringToBlob : base64StringToBlob,
   binaryStringToBlob : binaryStringToBlob,
@@ -2031,7 +2045,7 @@ module.exports = {
   blobToArrayBuffer  : blobToArrayBuffer
 };
 
-},{"blob":24,"native-or-lie":66}],24:[function(_dereq_,module,exports){
+},{"blob":24,"native-or-lie":67}],24:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Create a blob builder even when vendor prefixes exist
@@ -2350,20 +2364,20 @@ function useColors() {
   // NB: In an Electron preload script, document will be defined but not fully
   // initialized. Since we know we're in Chrome, we'll just detect this case
   // explicitly
-  if (typeof window !== 'undefined' && window && typeof window.process !== 'undefined' && window.process.type === 'renderer') {
+  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
     return true;
   }
 
   // is webkit? http://stackoverflow.com/a/16459606/376773
   // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
-  return (typeof document !== 'undefined' && document && 'WebkitAppearance' in document.documentElement.style) ||
+  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
     // is firebug? http://stackoverflow.com/a/398120/376773
-    (typeof window !== 'undefined' && window && window.console && (console.firebug || (console.exception && console.table))) ||
+    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
     // is firefox >= v31?
     // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
     // double check webkit in userAgent just in case we are in a worker
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
 }
 
 /**
@@ -2458,14 +2472,17 @@ function save(namespaces) {
  */
 
 function load() {
+  var r;
   try {
-    return exports.storage.debug;
+    r = exports.storage.debug;
   } catch(e) {}
 
   // If debug isn't set in LS, and we're in Electron, try to load $DEBUG
-  if (typeof process !== 'undefined' && 'env' in process) {
-    return process.env.DEBUG;
+  if (!r && typeof process !== 'undefined' && 'env' in process) {
+    r = process.env.DEBUG;
   }
+
+  return r;
 }
 
 /**
@@ -2492,7 +2509,7 @@ function localstorage() {
 }
 
 }).call(this,_dereq_('_process'))
-},{"./debug":29,"_process":73}],29:[function(_dereq_,module,exports){
+},{"./debug":29,"_process":74}],29:[function(_dereq_,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -2501,7 +2518,7 @@ function localstorage() {
  * Expose `debug()` as the module.
  */
 
-exports = module.exports = createDebug.debug = createDebug["default"] = createDebug;
+exports = module.exports = createDebug.debug = createDebug['default'] = createDebug;
 exports.coerce = coerce;
 exports.disable = disable;
 exports.enable = enable;
@@ -2633,7 +2650,10 @@ function createDebug(namespace) {
 function enable(namespaces) {
   exports.save(namespaces);
 
-  var split = (namespaces || '').split(/[\s,]+/);
+  exports.names = [];
+  exports.skips = [];
+
+  var split = (typeof namespaces === 'string' ? namespaces : '').split(/[\s,]+/);
   var len = split.length;
 
   for (var i = 0; i < len; i++) {
@@ -2693,7 +2713,7 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":65}],30:[function(_dereq_,module,exports){
+},{"ms":66}],30:[function(_dereq_,module,exports){
 
 module.exports = _dereq_('./lib/index');
 
@@ -2709,7 +2729,7 @@ module.exports = _dereq_('./socket');
  */
 module.exports.parser = _dereq_('engine.io-parser');
 
-},{"./socket":32,"engine.io-parser":42}],32:[function(_dereq_,module,exports){
+},{"./socket":32,"engine.io-parser":43}],32:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -3451,7 +3471,7 @@ Socket.prototype.filterUpgrades = function (upgrades) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./transport":33,"./transports/index":34,"component-emitter":26,"debug":40,"engine.io-parser":42,"indexof":49,"parsejson":67,"parseqs":68,"parseuri":69}],33:[function(_dereq_,module,exports){
+},{"./transport":33,"./transports/index":34,"component-emitter":26,"debug":40,"engine.io-parser":43,"indexof":50,"parsejson":68,"parseqs":69,"parseuri":70}],33:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -3610,7 +3630,7 @@ Transport.prototype.onClose = function () {
   this.emit('close');
 };
 
-},{"component-emitter":26,"engine.io-parser":42}],34:[function(_dereq_,module,exports){
+},{"component-emitter":26,"engine.io-parser":43}],34:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies
@@ -4577,7 +4597,7 @@ Polling.prototype.uri = function () {
   return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
 };
 
-},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":42,"parseqs":68,"xmlhttprequest-ssl":39,"yeast":75}],38:[function(_dereq_,module,exports){
+},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":43,"parseqs":69,"xmlhttprequest-ssl":39,"yeast":76}],38:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -4866,7 +4886,7 @@ WS.prototype.check = function () {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":42,"parseqs":68,"ws":25,"yeast":75}],39:[function(_dereq_,module,exports){
+},{"../transport":33,"component-inherit":27,"debug":40,"engine.io-parser":43,"parseqs":69,"ws":25,"yeast":76}],39:[function(_dereq_,module,exports){
 (function (global){
 // browser shim for xmlhttprequest module
 
@@ -4907,7 +4927,7 @@ module.exports = function (opts) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"has-cors":47}],40:[function(_dereq_,module,exports){
+},{"has-cors":48}],40:[function(_dereq_,module,exports){
 (function (process){
 
 /**
@@ -5088,7 +5108,7 @@ function localstorage(){
 }
 
 }).call(this,_dereq_('_process'))
-},{"./debug":41,"_process":73}],41:[function(_dereq_,module,exports){
+},{"./debug":41,"_process":74}],41:[function(_dereq_,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -5290,7 +5310,158 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":65}],42:[function(_dereq_,module,exports){
+},{"ms":42}],42:[function(_dereq_,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000
+var m = s * 60
+var h = m * 60
+var d = h * 24
+var y = d * 365.25
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} options
+ * @throws {Error} throw an error if val is not a non-empty string or a number
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function (val, options) {
+  options = options || {}
+  var type = typeof val
+  if (type === 'string' && val.length > 0) {
+    return parse(val)
+  } else if (type === 'number' && isNaN(val) === false) {
+    return options["long"] ?
+			fmtLong(val) :
+			fmtShort(val)
+  }
+  throw new Error('val is not a non-empty string or a valid number. val=' + JSON.stringify(val))
+}
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  str = String(str)
+  if (str.length > 10000) {
+    return
+  }
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str)
+  if (!match) {
+    return
+  }
+  var n = parseFloat(match[1])
+  var type = (match[2] || 'ms').toLowerCase()
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtShort(ms) {
+  if (ms >= d) {
+    return Math.round(ms / d) + 'd'
+  }
+  if (ms >= h) {
+    return Math.round(ms / h) + 'h'
+  }
+  if (ms >= m) {
+    return Math.round(ms / m) + 'm'
+  }
+  if (ms >= s) {
+    return Math.round(ms / s) + 's'
+  }
+  return ms + 'ms'
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtLong(ms) {
+  return plural(ms, d, 'day') ||
+    plural(ms, h, 'hour') ||
+    plural(ms, m, 'minute') ||
+    plural(ms, s, 'second') ||
+    ms + ' ms'
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) {
+    return
+  }
+  if (ms < n * 1.5) {
+    return Math.floor(ms / n) + ' ' + name
+  }
+  return Math.ceil(ms / n) + ' ' + name + 's'
+}
+
+},{}],43:[function(_dereq_,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -5903,7 +6074,7 @@ exports.decodePayloadAsBinary = function (data, binaryType, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./keys":43,"after":19,"arraybuffer.slice":20,"base64-arraybuffer":21,"blob":24,"has-binary":46,"wtf-8":74}],43:[function(_dereq_,module,exports){
+},{"./keys":44,"after":19,"arraybuffer.slice":20,"base64-arraybuffer":21,"blob":24,"has-binary":47,"wtf-8":75}],44:[function(_dereq_,module,exports){
 
 /**
  * Gets the keys for an object.
@@ -5924,9 +6095,9 @@ module.exports = Object.keys || function keys (obj){
   return arr;
 };
 
-},{}],44:[function(_dereq_,module,exports){
+},{}],45:[function(_dereq_,module,exports){
 module.exports = _dereq_('./lib');
-},{"./lib":45}],45:[function(_dereq_,module,exports){
+},{"./lib":46}],46:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -6225,7 +6396,7 @@ Reconnect.prototype.on = function (ev, fn) {
   return this;
 };
 
-},{"bind":22,"debug":28}],46:[function(_dereq_,module,exports){
+},{"bind":22,"debug":28}],47:[function(_dereq_,module,exports){
 (function (global){
 
 /*
@@ -6288,7 +6459,7 @@ function hasBinary(data) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"isarray":51}],47:[function(_dereq_,module,exports){
+},{"isarray":52}],48:[function(_dereq_,module,exports){
 
 /**
  * Module exports.
@@ -6307,7 +6478,7 @@ try {
   module.exports = false;
 }
 
-},{}],48:[function(_dereq_,module,exports){
+},{}],49:[function(_dereq_,module,exports){
 (function (global){
 'use strict';
 var Mutation = global.MutationObserver || global.WebKitMutationObserver;
@@ -6380,7 +6551,7 @@ function immediate(task) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],49:[function(_dereq_,module,exports){
+},{}],50:[function(_dereq_,module,exports){
 
 var indexOf = [].indexOf;
 
@@ -6391,43 +6562,47 @@ module.exports = function(arr, obj){
   }
   return -1;
 };
-},{}],50:[function(_dereq_,module,exports){
+},{}],51:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    ctor.prototype = Object.create(superCtor.prototype, {
-      constructor: {
-        value: ctor,
-        enumerable: false,
-        writable: true,
-        configurable: true
-      }
-    });
+    if (superCtor) {
+      ctor.super_ = superCtor
+      ctor.prototype = Object.create(superCtor.prototype, {
+        constructor: {
+          value: ctor,
+          enumerable: false,
+          writable: true,
+          configurable: true
+        }
+      })
+    }
   };
 } else {
   // old school shim for old browsers
   module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    var TempCtor = function () {}
-    TempCtor.prototype = superCtor.prototype
-    ctor.prototype = new TempCtor()
-    ctor.prototype.constructor = ctor
+    if (superCtor) {
+      ctor.super_ = superCtor
+      var TempCtor = function () {}
+      TempCtor.prototype = superCtor.prototype
+      ctor.prototype = new TempCtor()
+      ctor.prototype.constructor = ctor
+    }
   }
 }
 
-},{}],51:[function(_dereq_,module,exports){
+},{}],52:[function(_dereq_,module,exports){
 module.exports = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-},{}],52:[function(_dereq_,module,exports){
+},{}],53:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = INTERNAL;
 
 function INTERNAL() {}
-},{}],53:[function(_dereq_,module,exports){
+},{}],54:[function(_dereq_,module,exports){
 'use strict';
 var Promise = _dereq_('./promise');
 var reject = _dereq_('./reject');
@@ -6471,7 +6646,7 @@ function all(iterable) {
     }
   }
 }
-},{"./INTERNAL":52,"./handlers":54,"./promise":56,"./reject":59,"./resolve":60}],54:[function(_dereq_,module,exports){
+},{"./INTERNAL":53,"./handlers":55,"./promise":57,"./reject":60,"./resolve":61}],55:[function(_dereq_,module,exports){
 'use strict';
 var tryCatch = _dereq_('./tryCatch');
 var resolveThenable = _dereq_('./resolveThenable');
@@ -6518,7 +6693,7 @@ function getThen(obj) {
   }
 }
 
-},{"./resolveThenable":61,"./states":62,"./tryCatch":63}],55:[function(_dereq_,module,exports){
+},{"./resolveThenable":62,"./states":63,"./tryCatch":64}],56:[function(_dereq_,module,exports){
 module.exports = exports = _dereq_('./promise');
 
 exports.resolve = _dereq_('./resolve');
@@ -6526,7 +6701,7 @@ exports.reject = _dereq_('./reject');
 exports.all = _dereq_('./all');
 exports.race = _dereq_('./race');
 
-},{"./all":53,"./promise":56,"./race":58,"./reject":59,"./resolve":60}],56:[function(_dereq_,module,exports){
+},{"./all":54,"./promise":57,"./race":59,"./reject":60,"./resolve":61}],57:[function(_dereq_,module,exports){
 'use strict';
 
 var unwrap = _dereq_('./unwrap');
@@ -6570,7 +6745,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
   return promise;
 };
 
-},{"./INTERNAL":52,"./queueItem":57,"./resolveThenable":61,"./states":62,"./unwrap":64}],57:[function(_dereq_,module,exports){
+},{"./INTERNAL":53,"./queueItem":58,"./resolveThenable":62,"./states":63,"./unwrap":65}],58:[function(_dereq_,module,exports){
 'use strict';
 var handlers = _dereq_('./handlers');
 var unwrap = _dereq_('./unwrap');
@@ -6600,7 +6775,7 @@ QueueItem.prototype.otherCallRejected = function (value) {
   unwrap(this.promise, this.onRejected, value);
 };
 
-},{"./handlers":54,"./unwrap":64}],58:[function(_dereq_,module,exports){
+},{"./handlers":55,"./unwrap":65}],59:[function(_dereq_,module,exports){
 'use strict';
 var Promise = _dereq_('./promise');
 var reject = _dereq_('./reject');
@@ -6641,7 +6816,7 @@ function race(iterable) {
   }
 }
 
-},{"./INTERNAL":52,"./handlers":54,"./promise":56,"./reject":59,"./resolve":60}],59:[function(_dereq_,module,exports){
+},{"./INTERNAL":53,"./handlers":55,"./promise":57,"./reject":60,"./resolve":61}],60:[function(_dereq_,module,exports){
 'use strict';
 
 var Promise = _dereq_('./promise');
@@ -6653,7 +6828,7 @@ function reject(reason) {
 	var promise = new Promise(INTERNAL);
 	return handlers.reject(promise, reason);
 }
-},{"./INTERNAL":52,"./handlers":54,"./promise":56}],60:[function(_dereq_,module,exports){
+},{"./INTERNAL":53,"./handlers":55,"./promise":57}],61:[function(_dereq_,module,exports){
 'use strict';
 
 var Promise = _dereq_('./promise');
@@ -6688,7 +6863,7 @@ function resolve(value) {
       return EMPTYSTRING;
   }
 }
-},{"./INTERNAL":52,"./handlers":54,"./promise":56}],61:[function(_dereq_,module,exports){
+},{"./INTERNAL":53,"./handlers":55,"./promise":57}],62:[function(_dereq_,module,exports){
 'use strict';
 var handlers = _dereq_('./handlers');
 var tryCatch = _dereq_('./tryCatch');
@@ -6721,14 +6896,14 @@ function safelyResolveThenable(self, thenable) {
   }
 }
 exports.safely = safelyResolveThenable;
-},{"./handlers":54,"./tryCatch":63}],62:[function(_dereq_,module,exports){
+},{"./handlers":55,"./tryCatch":64}],63:[function(_dereq_,module,exports){
 // Lazy man's symbols for states
 
 exports.REJECTED = ['REJECTED'];
 exports.FULFILLED = ['FULFILLED'];
 exports.PENDING = ['PENDING'];
 
-},{}],63:[function(_dereq_,module,exports){
+},{}],64:[function(_dereq_,module,exports){
 'use strict';
 
 module.exports = tryCatch;
@@ -6744,7 +6919,7 @@ function tryCatch(func, value) {
   }
   return out;
 }
-},{}],64:[function(_dereq_,module,exports){
+},{}],65:[function(_dereq_,module,exports){
 'use strict';
 
 var immediate = _dereq_('immediate');
@@ -6766,16 +6941,16 @@ function unwrap(promise, func, value) {
     }
   });
 }
-},{"./handlers":54,"immediate":48}],65:[function(_dereq_,module,exports){
+},{"./handlers":55,"immediate":49}],66:[function(_dereq_,module,exports){
 /**
  * Helpers.
  */
 
-var s = 1000
-var m = s * 60
-var h = m * 60
-var d = h * 24
-var y = d * 365.25
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
 
 /**
  * Parse or format the given `val`.
@@ -6785,24 +6960,25 @@ var y = d * 365.25
  *  - `long` verbose formatting [false]
  *
  * @param {String|Number} val
- * @param {Object} options
+ * @param {Object} [options]
  * @throws {Error} throw an error if val is not a non-empty string or a number
  * @return {String|Number}
  * @api public
  */
 
-module.exports = function (val, options) {
-  options = options || {}
-  var type = typeof val
+module.exports = function(val, options) {
+  options = options || {};
+  var type = typeof val;
   if (type === 'string' && val.length > 0) {
-    return parse(val)
+    return parse(val);
   } else if (type === 'number' && isNaN(val) === false) {
-    return options["long"] ?
-			fmtLong(val) :
-			fmtShort(val)
+    return options["long"] ? fmtLong(val) : fmtShort(val);
   }
-  throw new Error('val is not a non-empty string or a valid number. val=' + JSON.stringify(val))
-}
+  throw new Error(
+    'val is not a non-empty string or a valid number. val=' +
+      JSON.stringify(val)
+  );
+};
 
 /**
  * Parse the given `str` and return milliseconds.
@@ -6813,53 +6989,55 @@ module.exports = function (val, options) {
  */
 
 function parse(str) {
-  str = String(str)
-  if (str.length > 10000) {
-    return
+  str = String(str);
+  if (str.length > 100) {
+    return;
   }
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str)
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(
+    str
+  );
   if (!match) {
-    return
+    return;
   }
-  var n = parseFloat(match[1])
-  var type = (match[2] || 'ms').toLowerCase()
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
   switch (type) {
     case 'years':
     case 'year':
     case 'yrs':
     case 'yr':
     case 'y':
-      return n * y
+      return n * y;
     case 'days':
     case 'day':
     case 'd':
-      return n * d
+      return n * d;
     case 'hours':
     case 'hour':
     case 'hrs':
     case 'hr':
     case 'h':
-      return n * h
+      return n * h;
     case 'minutes':
     case 'minute':
     case 'mins':
     case 'min':
     case 'm':
-      return n * m
+      return n * m;
     case 'seconds':
     case 'second':
     case 'secs':
     case 'sec':
     case 's':
-      return n * s
+      return n * s;
     case 'milliseconds':
     case 'millisecond':
     case 'msecs':
     case 'msec':
     case 'ms':
-      return n
+      return n;
     default:
-      return undefined
+      return undefined;
   }
 }
 
@@ -6873,18 +7051,18 @@ function parse(str) {
 
 function fmtShort(ms) {
   if (ms >= d) {
-    return Math.round(ms / d) + 'd'
+    return Math.round(ms / d) + 'd';
   }
   if (ms >= h) {
-    return Math.round(ms / h) + 'h'
+    return Math.round(ms / h) + 'h';
   }
   if (ms >= m) {
-    return Math.round(ms / m) + 'm'
+    return Math.round(ms / m) + 'm';
   }
   if (ms >= s) {
-    return Math.round(ms / s) + 's'
+    return Math.round(ms / s) + 's';
   }
-  return ms + 'ms'
+  return ms + 'ms';
 }
 
 /**
@@ -6900,7 +7078,7 @@ function fmtLong(ms) {
     plural(ms, h, 'hour') ||
     plural(ms, m, 'minute') ||
     plural(ms, s, 'second') ||
-    ms + ' ms'
+    ms + ' ms';
 }
 
 /**
@@ -6909,18 +7087,18 @@ function fmtLong(ms) {
 
 function plural(ms, n, name) {
   if (ms < n) {
-    return
+    return;
   }
   if (ms < n * 1.5) {
-    return Math.floor(ms / n) + ' ' + name
+    return Math.floor(ms / n) + ' ' + name;
   }
-  return Math.ceil(ms / n) + ' ' + name + 's'
+  return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],66:[function(_dereq_,module,exports){
+},{}],67:[function(_dereq_,module,exports){
 module.exports = typeof Promise === 'function' ? Promise : _dereq_('lie');
 
-},{"lie":55}],67:[function(_dereq_,module,exports){
+},{"lie":56}],68:[function(_dereq_,module,exports){
 (function (global){
 /**
  * JSON parse.
@@ -6955,7 +7133,7 @@ module.exports = function parsejson(data) {
   }
 };
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],68:[function(_dereq_,module,exports){
+},{}],69:[function(_dereq_,module,exports){
 /**
  * Compiles a querystring
  * Returns string representation of the object
@@ -6994,7 +7172,7 @@ exports.decode = function(qs){
   return qry;
 };
 
-},{}],69:[function(_dereq_,module,exports){
+},{}],70:[function(_dereq_,module,exports){
 /**
  * Parses an URI
  *
@@ -7035,7 +7213,7 @@ module.exports = function parseuri(str) {
     return uri;
 };
 
-},{}],70:[function(_dereq_,module,exports){
+},{}],71:[function(_dereq_,module,exports){
 (function (global){
 "use strict";
 
@@ -7127,7 +7305,7 @@ module.exports = {
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],71:[function(_dereq_,module,exports){
+},{}],72:[function(_dereq_,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -7138,7 +7316,8 @@ var lie = _interopDefault(_dereq_('lie'));
 var PouchPromise = typeof Promise === 'function' ? Promise : lie;
 
 module.exports = PouchPromise;
-},{"lie":72}],72:[function(_dereq_,module,exports){
+
+},{"lie":73}],73:[function(_dereq_,module,exports){
 'use strict';
 var immediate = _dereq_('immediate');
 
@@ -7257,7 +7436,7 @@ handlers.reject = function (self, error) {
 function getThen(obj) {
   // Make sure we only access the accessor once as required by the spec
   var then = obj && obj.then;
-  if (obj && typeof obj === 'object' && typeof then === 'function') {
+  if (obj && (typeof obj === 'object' || typeof obj === 'function') && typeof then === 'function') {
     return function appyThen() {
       then.apply(obj, arguments);
     };
@@ -7393,7 +7572,7 @@ function race(iterable) {
   }
 }
 
-},{"immediate":48}],73:[function(_dereq_,module,exports){
+},{"immediate":49}],74:[function(_dereq_,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -7453,7 +7632,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],74:[function(_dereq_,module,exports){
+},{}],75:[function(_dereq_,module,exports){
 (function (global){
 /*! https://mths.be/wtf8 v1.0.0 by @mathias */
 ;(function(root) {
@@ -7691,7 +7870,7 @@ process.umask = function() { return 0; };
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],75:[function(_dereq_,module,exports){
+},{}],76:[function(_dereq_,module,exports){
 'use strict';
 
 var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
